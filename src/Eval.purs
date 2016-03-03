@@ -1,14 +1,13 @@
 module Eval where
 
 import Prelude
-import Types (IO, EnvRef, Env, Directory, Command(..), Dir(..), LsFlag(..), DirContents)
+import Types (IO, EnvRef, Env, Directory, Command(..), Dir(..), LsFlag(..), DirContents, AbsoFile)
 import Util (showFsPath, bolden, release, printErr, unitize, catch)
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Data.List (List(Nil), (:), mapMaybe, null, fromFoldable)
-import Data.Path.Pathy ((</>), unsafePrintPath, canonicalize, fileName, runFileName)
-import Data.Array (zip)
+import Data.List (List(Nil), (:), mapMaybe, null, fromFoldable, zip)
+import Data.Path.Pathy ((</>), unsafePrintPath, canonicalize, fileName, runFileName, parseRelFile)
 import Data.String (charAt)
 import Data.Foldable (foldl, intercalate)
 import Data.Traversable (traverse)
@@ -135,8 +134,9 @@ ls [LsAll] d =
 ls [] d = do
   all <- ls [LsAll] d
 
-  let dirs = map ((d </> _) <<< ) mapMaybe (f <<< runFileName <<< fileName) all.dirs -- FIXME
-      files = mapMaybe (f <<< runFileName <<< fileName) all.files
+  let stripDir = map (d </> _) <<< mapMaybe parseRelFile <<< mapMaybe (f <<< runFileName <<< fileName)
+      dirs = stripDir all.dirs
+      files = stripDir all.files
 
   pure { dirs, files }
 
@@ -150,7 +150,8 @@ ls _ _ = pure { dirs: Nil, files: Nil }
 
 partitionDirs :: List AbsoFile -> IO DirContents
 partitionDirs xs = do
-  statRes <- catch $ traverse stat xs
+  let stringified = map showFsPath xs
+  statRes <- catch $ traverse stat stringified
   case statRes of
        Right stats ->
          let zipped = zip stats xs
@@ -163,7 +164,9 @@ partitionDirs xs = do
 prettyLogContents :: Array LsFlag -> Directory -> IO Unit
 prettyLogContents fs p = do
   dirFiles <- ls fs p
-  let boldDirs = bolden $ intercalate " " (map (_ <> "/") dirFiles.dirs)
-      nonboldFiles = intercalate " " dirFiles.files
+  let dirs = map (runFileName <<< fileName) dirFiles.dirs
+      files = map (runFileName <<< fileName) dirFiles.files
+      boldDirs = bolden $ intercalate " " (map (_ <> "/") dirs)
+      nonboldFiles = intercalate " " files
   when (not $ null dirFiles.dirs) $ log boldDirs
   when (not $ null dirFiles.files) $ log nonboldFiles
