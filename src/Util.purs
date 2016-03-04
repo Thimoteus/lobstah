@@ -4,6 +4,8 @@ import Prelude
 
 import Data.Path.Pathy (RelDir, Unsandboxed, Path, canonicalize, unsafePrintPath, unsandbox, currentDir)
 import Data.Either (Either(..))
+import Data.Maybe (Maybe(Just))
+import Data.String (indexOf)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Exception (Error, EXCEPTION, catchException)
@@ -38,3 +40,9 @@ printErr = log <<< message
 
 unitize :: forall m a. Applicative m => a -> m Unit
 unitize _ = pure unit
+
+beginsWith :: String -> String -> Boolean
+beginsWith super sub =
+  case indexOf sub super of
+      Just 0 -> true
+      _ -> false

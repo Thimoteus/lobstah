@@ -4,6 +4,7 @@ import Prelude
 import Parser (parseCommand)
 import Eval (eval)
 import Types (IO, EnvRef, initialEnv)
+import Completion (completer)
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
@@ -13,8 +14,7 @@ import Control.Monad.Eff.Console (log)
 import Control.Monad.ST (modifySTRef, readSTRef)
 import Control.Apply ((*>))
 
-import Node.ReadLine (Interface, setLineHandler, prompt, setPrompt
-                     ,noCompletion, createInterface)
+import Node.ReadLine (Interface, setLineHandler, prompt, setPrompt, createInterface)
 import Node.Process (lookupEnv, onBeforeExit)
 
 main :: IO Unit
@@ -24,8 +24,8 @@ main = void do
 
   onBeforeExit cleanUp
 
-  interface <- createInterface noCompletion
   init <- initialEnv
+  interface <- createInterface $ completer init
 
   getInitData init
   setPrompt "> " 2 interface
@@ -37,8 +37,7 @@ main = void do
         env <- readSTRef e
         case parseCommand cmd env of
 
-             --Right Exit -> close interface
-             Right cmd -> eval e interface cmd -- *> prompt interface
+             Right cmd -> eval e interface cmd
              Left err -> log err *> prompt interface
 
   setLineHandler interface (lineHandler init)

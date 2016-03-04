@@ -1,12 +1,12 @@
 module Eval where
 
 import Prelude
-import Types (IO, EnvRef, Env, Directory, Command(..), Dir(..), LsFlag(..), DirContents, AbsoFile)
+import Types (IO, EnvRef, Env, Directory, Command(..), Dir(..), LsFlag(..), DirContents, AbsoFile, emptyDirContents)
 import Util (showFsPath, bolden, release, printErr, unitize, catch)
 
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Data.List (List(Nil), (:), mapMaybe, null, fromFoldable, zip)
+import Data.List (List(), (:), mapMaybe, null, fromFoldable, zip, fromList)
 import Data.Path.Pathy ((</>), unsafePrintPath, canonicalize, fileName, runFileName, parseRelFile)
 import Data.String (charAt)
 import Data.Foldable (foldl, intercalate)
@@ -35,7 +35,7 @@ eval e i c = case c of
          if pExists
             then let succ = do
                        modifySTRef e $ (_ {cwd = canonicalize p}) <<< modhistory c
-                       prettyLogContents [] p
+                       prettyLogContents [] p >>= modcompletions e
                   in release (chdir $ showFsPath p) printErr (const succ)
             else log $ "Directory " <> showFsPath p <> " does not exist."
          prompt i
@@ -54,7 +54,7 @@ eval e i c = case c of
 
          pExists <- existsPath p
          if pExists
-            then prettyLogContents flags p
+            then prettyLogContents flags p >>= modcompletions e
             else log "Directory does not exist."
          prompt i
 
@@ -127,26 +127,26 @@ existsPath = exists <<< showFsPath
 
 ls :: Array LsFlag -> Directory -> IO DirContents
 ls [LsAll] d =
-  let onFail _ = pure { dirs: Nil, files: Nil }
+  let onFail _ = pure emptyDirContents
       onSucc = partitionDirs <<< map (d </> _) <<< mapMaybe parseRelFile <<< fromFoldable
    in release (readdir $ showFsPath d) onFail onSucc
 
 ls [] d = do
   all <- ls [LsAll] d
 
-  let stripDir = map (d </> _) <<< mapMaybe parseRelFile <<< mapMaybe (f <<< runFileName <<< fileName)
+  let stripDir = map (d </> _) <<< mapMaybe parseRelFile <<< mapMaybe (hiddenFile <<< runFileName <<< fileName)
       dirs = stripDir all.dirs
       files = stripDir all.files
 
   pure { dirs, files }
 
-    where
-      f :: String -> Maybe String
-      f str = case charAt 0 str of
-                   Just '.' -> Nothing
-                   _ -> Just str
+ls _ _ = pure emptyDirContents
 
-ls _ _ = pure { dirs: Nil, files: Nil }
+hiddenFile :: String -> Maybe String
+hiddenFile str =
+  case charAt 0 str of
+      Just '.' -> Nothing
+      _ -> Just str
 
 partitionDirs :: List AbsoFile -> IO DirContents
 partitionDirs xs = do
@@ -158,10 +158,10 @@ partitionDirs xs = do
              f acc d = if isDirectory (fst d)
                           then acc { dirs = snd d : acc.dirs }
                           else acc { files = snd d : acc.files }
-          in pure $ foldl f { dirs: Nil, files: Nil } zipped
-       _ -> pure { dirs: Nil, files: Nil }
+          in pure $ foldl f emptyDirContents zipped
+       _ -> pure emptyDirContents
 
-prettyLogContents :: Array LsFlag -> Directory -> IO Unit
+prettyLogContents :: Array LsFlag -> Directory -> IO DirContents
 prettyLogContents fs p = do
   dirFiles <- ls fs p
   let dirs = map (runFileName <<< fileName) dirFiles.dirs
@@ -170,3 +170,12 @@ prettyLogContents fs p = do
       nonboldFiles = intercalate " " files
   when (not $ null dirFiles.dirs) $ log boldDirs
   when (not $ null dirFiles.files) $ log nonboldFiles
+  pure dirFiles
+
+modcompletions :: EnvRef -> DirContents -> IO Unit
+modcompletions e { files, dirs } = do
+  let dirs' = map ((_ <> "/") <<< runFileName <<< fileName) dirs
+      files' = map (runFileName <<< fileName) files
+      f env = env { completions = fromList files' ++ fromList dirs' }
+  modifySTRef e f
+  pure unit

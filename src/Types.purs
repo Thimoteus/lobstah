@@ -31,6 +31,9 @@ type Thing = Either Dir File
 
 type DirContents = { files :: List AbsoFile, dirs :: List AbsoFile }
 
+emptyDirContents :: DirContents
+emptyDirContents = { files: Nil, dirs: Nil }
+
 type EnvRef = STRef ShellST Env
 
 type Env = { cwd :: Directory
@@ -39,6 +42,7 @@ type Env = { cwd :: Directory
            , aliases :: StrMap String
            , history :: List Command
            , path :: List (AbsFile Unsandboxed)
+           , completions :: Array String
            }
 
 initialEnv :: IO EnvRef
@@ -48,6 +52,7 @@ initialEnv = newSTRef { cwd: unsandbox rootDir
                       , aliases: empty :: StrMap String
                       , history: Nil
                       , path: Nil
+                      , completions: []
                       }
 
 type IO = Eff ( console :: CONSOLE

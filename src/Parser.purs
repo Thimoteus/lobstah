@@ -12,7 +12,7 @@ import Data.String (replace)
 
 import Control.Apply ((*>))
 
-import Text.Parsing.Simple
+import Text.Parsing.Simple (Parser, char, sat, many, fromCharList, item, fail, skipSpaces, string, (<?>), word, lookahead, parse)
 import Text.Parsing.Combinators (bracket, option)
 
 parseCommand :: String -> Env -> Either String Command
@@ -71,7 +71,7 @@ mkdir env = MkDir <$> do
   string "mkdir"
   skipSpaces
   dir <- substitute env <<< fromCharList <$> many item
-  
+
   case parseRelDir dir of
        Just y -> pure (Relative y)
        _ -> case parseAbsDir dir of
@@ -156,4 +156,3 @@ quoted = fromCharList <$> do
 
 substitute :: Env -> String -> String
 substitute env s = replace "~/" (showFsPath env.home) s
-
